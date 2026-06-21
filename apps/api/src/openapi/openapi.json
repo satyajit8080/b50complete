@@ -1,0 +1,1985 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Bull50 API",
+    "version": "0.3.0",
+    "description": "India's AI-powered stock market platform — API reference. Generated from the actual zod validation schemas used by each route, not hand-maintained separately. Routes marked 'pending' in their description are scaffolded but not yet functional — see SETUP.md known gaps for details."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:4000",
+      "description": "Local development"
+    },
+    {
+      "url": "https://api.bull50.com",
+      "description": "Production (placeholder — update once deployed)"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Access token from /api/auth/login, /register, or /refresh. 15 min expiry."
+      }
+    },
+    "schemas": {
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "clx1a2b3c0000abcd1234efgh"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "USER",
+              "ADMIN",
+              "SUPERADMIN"
+            ]
+          },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "FREE",
+              "PRO",
+              "ELITE"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "role",
+          "tier"
+        ]
+      },
+      "AuthSuccess": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "description": "JWT, 15 min expiry. Refresh token is set as an httpOnly cookie."
+          },
+          "user": {
+            "$ref": "#/components/schemas/User"
+          }
+        },
+        "required": [
+          "accessToken",
+          "user"
+        ]
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "example": "Invalid request"
+          },
+          "details": {
+            "nullable": true
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "DhanExchangeSegment": {
+        "type": "string",
+        "enum": [
+          "NSE_EQ",
+          "NSE_FNO",
+          "NSE_CURRENCY",
+          "BSE_EQ",
+          "BSE_FNO",
+          "MCX_COMM",
+          "IDX_I"
+        ]
+      },
+      "TopListCategory": {
+        "type": "string",
+        "enum": [
+          "TOP_GAINERS",
+          "TOP_LOSERS",
+          "MOST_ACTIVE",
+          "VOLUME_SHOCKERS",
+          "BREAKOUT",
+          "BREAKDOWN",
+          "WEEK_52_HIGH",
+          "WEEK_52_LOW",
+          "GAP_UP",
+          "GAP_DOWN",
+          "UPPER_CIRCUIT",
+          "LOWER_CIRCUIT"
+        ],
+        "description": "VOLUME_SHOCKERS, BREAKOUT, and BREAKDOWN are accepted by the schema but not yet computed by the top-lists engine — see Phase 3 known gaps. The other 9 categories are live."
+      }
+    },
+    "parameters": {}
+  },
+  "paths": {
+    "/api/auth/register": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Create a new account",
+        "description": "Rate limited to 10 requests/min per IP. Sets a refresh token as an httpOnly cookie.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 8
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  }
+                },
+                "required": [
+                  "email",
+                  "password"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Account created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSuccess"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Email already registered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Log in",
+        "description": "Rate limited to 10 requests/min per IP.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "email",
+                  "password"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSuccess"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/refresh": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Rotate refresh token and issue a new access token",
+        "description": "Reads the bull50_rt httpOnly cookie. Rotates the refresh token on every call. If a revoked/expired token is reused, ALL sessions for that user are revoked (theft detection).",
+        "responses": {
+          "200": {
+            "description": "New access token issued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accessToken": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "accessToken"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No/invalid/expired refresh token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Log out and revoke the current session",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Logged out"
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Get the current authenticated user",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  },
+                  "required": [
+                    "user"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/market/overview/indices": {
+      "get": {
+        "tags": [
+          "Market — Overview"
+        ],
+        "summary": "Live snapshot of major NSE indices (Nifty 50, Bank Nifty, India VIX, etc.)",
+        "responses": {
+          "200": {
+            "description": "Index snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "indices": {
+                      "type": "array",
+                      "items": {
+                        "nullable": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "indices"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/market/instruments/search": {
+      "get": {
+        "tags": [
+          "Market — Overview"
+        ],
+        "summary": "Search instruments by symbol",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 50
+            },
+            "required": true,
+            "name": "q",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching instruments",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "nullable": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "results"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/market/quote/{symbol}": {
+      "get": {
+        "tags": [
+          "Market — Quotes"
+        ],
+        "summary": "Live quote for a symbol (LTP, OHLC, volume, OI)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "RELIANCE"
+            },
+            "required": true,
+            "name": "symbol",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "$ref": "#/components/schemas/DhanExchangeSegment"
+            },
+            "required": false,
+            "name": "segment",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Quote",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "symbol": {
+                      "type": "string"
+                    },
+                    "quote": {
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "symbol"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown symbol",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/market/historical/{symbol}": {
+      "get": {
+        "tags": [
+          "Market — Quotes"
+        ],
+        "summary": "Historical OHLCV candles (daily, or intraday if `interval` is given)",
+        "description": "Omit `interval` for daily candles. Dhan limits intraday requests to a 90-day window per call.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "RELIANCE"
+            },
+            "required": true,
+            "name": "symbol",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "$ref": "#/components/schemas/DhanExchangeSegment"
+            },
+            "required": false,
+            "name": "segment",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "5",
+                "15",
+                "25",
+                "60"
+              ],
+              "description": "Minutes. Omit for daily candles."
+            },
+            "required": false,
+            "name": "interval",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "example": "2026-01-01"
+            },
+            "required": true,
+            "name": "fromDate",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "example": "2026-06-21"
+            },
+            "required": true,
+            "name": "toDate",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Candle data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "symbol": {
+                      "type": "string"
+                    },
+                    "candles": {
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "symbol"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown symbol",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/market/options/{symbol}/expiries": {
+      "get": {
+        "tags": [
+          "Market — Options"
+        ],
+        "summary": "Available expiry dates for an underlying",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "RELIANCE"
+            },
+            "required": true,
+            "name": "symbol",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "nullable": true
+            },
+            "required": false,
+            "name": "underlyingScrip",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "$ref": "#/components/schemas/DhanExchangeSegment"
+            },
+            "required": false,
+            "name": "segment",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Expiry list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "nullable": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/market/options/{symbol}/chain": {
+      "get": {
+        "tags": [
+          "Market — Options"
+        ],
+        "summary": "Full option chain for an expiry (raw Dhan response — Greeks, OI, IV per strike)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "RELIANCE"
+            },
+            "required": true,
+            "name": "symbol",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "nullable": true
+            },
+            "required": false,
+            "name": "underlyingScrip",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "$ref": "#/components/schemas/DhanExchangeSegment"
+            },
+            "required": false,
+            "name": "segment",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "expiry",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Option chain",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing expiry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/market/options/{symbol}/metrics": {
+      "get": {
+        "tags": [
+          "Market — Options"
+        ],
+        "summary": "Derived option chain metrics: PCR, Max Pain, ATM IV, IV Rank/Percentile, OI change",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "RELIANCE"
+            },
+            "required": true,
+            "name": "symbol",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "nullable": true
+            },
+            "required": false,
+            "name": "underlyingScrip",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "$ref": "#/components/schemas/DhanExchangeSegment"
+            },
+            "required": false,
+            "name": "segment",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "expiry",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Computed metrics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "symbol": {
+                      "type": "string"
+                    },
+                    "expiry": {
+                      "type": "string"
+                    },
+                    "underlyingLastPrice": {
+                      "type": "number"
+                    },
+                    "metrics": {
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "symbol",
+                    "expiry",
+                    "underlyingLastPrice"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing expiry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/market/fundamentals/{symbol}/profile": {
+      "get": {
+        "tags": [
+          "Market — Fundamentals (FinEdge, pending)"
+        ],
+        "summary": "Company profile (live FinEdge pass-through)",
+        "description": "NOT YET FUNCTIONAL — FinEdge endpoint path is a placeholder pending confirmed API docs. Returns an upstream error until wired up.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "RELIANCE"
+            },
+            "required": true,
+            "name": "symbol",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "nullable": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/market/fundamentals/{symbol}/ratios": {
+      "get": {
+        "tags": [
+          "Market — Fundamentals (FinEdge, pending)"
+        ],
+        "summary": "Financial ratios (live FinEdge pass-through)",
+        "description": "NOT YET FUNCTIONAL — FinEdge endpoint path is a placeholder pending confirmed API docs. Returns an upstream error until wired up.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "RELIANCE"
+            },
+            "required": true,
+            "name": "symbol",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ratios",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "nullable": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/market/fundamentals/{symbol}/stored": {
+      "get": {
+        "tags": [
+          "Market — Fundamentals (Bull50 storage)"
+        ],
+        "summary": "Latest stored fundamentals + shareholding for a symbol",
+        "description": "Reads from Bull50's own CompanyFundamentals table — populated via FinEdge (pending) or admin manual entry. Returns 404 until populated.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "RELIANCE"
+            },
+            "required": true,
+            "name": "symbol",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "QUARTERLY",
+                "ANNUAL",
+                "TTM"
+              ]
+            },
+            "required": false,
+            "name": "periodType",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stored fundamentals",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No data yet for this symbol",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/market/fundamentals/{symbol}/history": {
+      "get": {
+        "tags": [
+          "Market — Fundamentals (Bull50 storage)"
+        ],
+        "summary": "Historical fundamentals series for a symbol",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "RELIANCE"
+            },
+            "required": true,
+            "name": "symbol",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "QUARTERLY",
+                "ANNUAL",
+                "TTM"
+              ]
+            },
+            "required": false,
+            "name": "periodType",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 40
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "History",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "nullable": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/market/breadth": {
+      "get": {
+        "tags": [
+          "Market — Breadth"
+        ],
+        "summary": "Latest market breadth snapshot (advances/declines, new highs/lows)",
+        "description": "Computed by the scheduler every 5 min during market hours. Returns 404 if the scheduler hasn't run yet.",
+        "responses": {
+          "200": {
+            "description": "Breadth snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No breadth data yet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/market/top-lists/{category}": {
+      "get": {
+        "tags": [
+          "Market — Breadth"
+        ],
+        "summary": "Top list for a category (gainers, losers, 52w high/low, etc.)",
+        "description": "9 of 12 categories are computed (TOP_GAINERS, TOP_LOSERS, MOST_ACTIVE, GAP_UP, GAP_DOWN, UPPER_CIRCUIT, LOWER_CIRCUIT, WEEK_52_HIGH, WEEK_52_LOW). VOLUME_SHOCKERS, BREAKOUT, BREAKDOWN are accepted but return an empty list — see known gaps.",
+        "parameters": [
+          {
+            "schema": {
+              "$ref": "#/components/schemas/TopListCategory"
+            },
+            "required": true,
+            "name": "category",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ranked list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "category": {
+                      "type": "string"
+                    },
+                    "entries": {
+                      "type": "array",
+                      "items": {
+                        "nullable": true
+                      }
+                    }
+                  },
+                  "required": [
+                    "category",
+                    "entries"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown category",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/market/sectors/strength": {
+      "get": {
+        "tags": [
+          "Market — Sectors"
+        ],
+        "summary": "Current sector strength ranking (NIFTY sectoral index proxy)",
+        "description": "Returns an empty array with a note until SectorMapping is seeded via the admin endpoints — see known gaps.",
+        "responses": {
+          "200": {
+            "description": "Ranked sectors",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sectors": {
+                      "type": "array",
+                      "items": {
+                        "nullable": true
+                      }
+                    },
+                    "note": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "sectors"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/market/sectors/rotation": {
+      "get": {
+        "tags": [
+          "Market — Sectors"
+        ],
+        "summary": "Sector rotation vs. N hours ago (default 24h)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 720
+            },
+            "required": false,
+            "name": "hoursAgo",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Rotation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "nullable": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/market/ai/market-movement": {
+      "get": {
+        "tags": [
+          "Market — AI"
+        ],
+        "summary": "AI-generated explanation of today's market movement",
+        "description": "Generated by Claude from Bull50's own breadth data (never raw upstream payloads). Requires ANTHROPIC_API_KEY to be configured.",
+        "responses": {
+          "200": {
+            "description": "Insight",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "insight": {
+                      "type": "string"
+                    },
+                    "basedOn": {
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "insight"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No breadth data yet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/market/ai/options-explain/{symbol}": {
+      "get": {
+        "tags": [
+          "Market — AI"
+        ],
+        "summary": "AI-generated explanation of option chain positioning",
+        "description": "Generated by Claude from Bull50's own computed option metrics (PCR, Max Pain, IV) — never the raw Dhan payload.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "RELIANCE"
+            },
+            "required": true,
+            "name": "symbol",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "nullable": true
+            },
+            "required": false,
+            "name": "underlyingScrip",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "$ref": "#/components/schemas/DhanExchangeSegment"
+            },
+            "required": false,
+            "name": "segment",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "expiry",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Insight",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "insight": {
+                      "type": "string"
+                    },
+                    "basedOn": {
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "insight"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing expiry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/monitoring/external-apis": {
+      "get": {
+        "tags": [
+          "Admin — Monitoring"
+        ],
+        "summary": "Circuit breaker state for DhanHQ and FinEdge",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Circuit states",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/monitoring/queues": {
+      "get": {
+        "tags": [
+          "Admin — Monitoring"
+        ],
+        "summary": "BullMQ job counts for all queues (waiting/active/completed/failed/delayed)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Queue stats",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/monitoring/redis": {
+      "get": {
+        "tags": [
+          "Admin — Monitoring"
+        ],
+        "summary": "Redis connection status",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Redis status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "connected": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "connected"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/monitoring/instrument-sync/trigger": {
+      "post": {
+        "tags": [
+          "Admin — Instrument Sync"
+        ],
+        "summary": "Manually trigger an instrument master sync from Dhan's scrip CSV",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Sync enqueued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "jobId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "message",
+                    "jobId"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/monitoring/instrument-sync/logs": {
+      "get": {
+        "tags": [
+          "Admin — Instrument Sync"
+        ],
+        "summary": "Recent instrument sync run history",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sync logs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/monitoring/corporate-actions": {
+      "get": {
+        "tags": [
+          "Admin — Corporate Actions"
+        ],
+        "summary": "List stored corporate actions, optionally filtered by symbol",
+        "description": "Currently always returns an empty list — no sync worker writes to this table yet (depends on pending FinEdge endpoints).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 200
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "symbol",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Corporate actions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/monitoring/sector-mapping": {
+      "post": {
+        "tags": [
+          "Admin — Sector Mapping"
+        ],
+        "summary": "Seed/update a single stock's sectoral index mapping",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "securityId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "symbol": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "sectoralIndex": {
+                    "type": "string",
+                    "minLength": 1,
+                    "example": "NIFTYBANK"
+                  },
+                  "sectoralIndexSecurityId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "securityId",
+                  "symbol",
+                  "sectoralIndex"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Mapping saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Admin — Sector Mapping"
+        ],
+        "summary": "List all current sector mappings",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Mappings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/monitoring/sector-mapping/bulk": {
+      "post": {
+        "tags": [
+          "Admin — Sector Mapping"
+        ],
+        "summary": "Bulk seed/update sector mappings (max 1000 per call)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "securityId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "symbol": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "sectoralIndex": {
+                      "type": "string",
+                      "minLength": 1,
+                      "example": "NIFTYBANK"
+                    },
+                    "sectoralIndexSecurityId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "securityId",
+                    "symbol",
+                    "sectoralIndex"
+                  ]
+                },
+                "minItems": 1,
+                "maxItems": 1000
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Mappings saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "upserted": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "upserted"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/monitoring/fundamentals/manual-entry": {
+      "post": {
+        "tags": [
+          "Admin — Fundamentals"
+        ],
+        "summary": "Manually enter fundamentals for a symbol (bridge until FinEdge endpoints are confirmed)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "securityId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "symbol": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "periodType": {
+                    "type": "string",
+                    "enum": [
+                      "QUARTERLY",
+                      "ANNUAL",
+                      "TTM"
+                    ]
+                  },
+                  "periodEndDate": {
+                    "type": "string",
+                    "description": "ISO date",
+                    "example": "2026-03-31"
+                  },
+                  "marketCap": {
+                    "type": "number"
+                  },
+                  "enterpriseValue": {
+                    "type": "number"
+                  },
+                  "peRatio": {
+                    "type": "number"
+                  },
+                  "pbRatio": {
+                    "type": "number"
+                  },
+                  "bookValue": {
+                    "type": "number"
+                  },
+                  "eps": {
+                    "type": "number"
+                  },
+                  "roe": {
+                    "type": "number"
+                  },
+                  "roce": {
+                    "type": "number"
+                  },
+                  "debtToEquity": {
+                    "type": "number"
+                  },
+                  "profitLoss": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "nullable": true
+                    }
+                  },
+                  "balanceSheet": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "nullable": true
+                    }
+                  },
+                  "cashFlow": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "nullable": true
+                    }
+                  }
+                },
+                "required": [
+                  "securityId",
+                  "symbol",
+                  "periodType",
+                  "periodEndDate"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Fundamentals saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

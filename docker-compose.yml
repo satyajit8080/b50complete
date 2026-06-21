@@ -1,0 +1,34 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: bull50-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: bull50
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-CHANGE_ME}
+      POSTGRES_DB: bull50
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - bull50_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bull50"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: bull50-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - bull50_redisdata:/data
+    command: redis-server --appendonly yes
+
+volumes:
+  bull50_pgdata:
+  bull50_redisdata:

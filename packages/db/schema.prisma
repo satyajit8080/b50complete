@@ -1,0 +1,382 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+  SUPERADMIN
+}
+
+enum SubscriptionTier {
+  FREE
+  PRO
+  ELITE
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  phone         String?  @unique
+  passwordHash  String
+  name          String?
+  role          Role     @default(USER)
+  tier          SubscriptionTier @default(FREE)
+  emailVerified Boolean  @default(false)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  lastLoginAt   DateTime?
+
+  refreshTokens RefreshToken[]
+  watchlists    Watchlist[]
+  alerts        Alert[]
+  auditLogs     AuditLog[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  userAgent String?
+  ipAddress String?
+
+  @@index([userId])
+  @@index([token])
+}
+
+model Watchlist {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String   @default("My Watchlist")
+  symbols   String[] @default([])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+enum AlertCondition {
+  PRICE_ABOVE
+  PRICE_BELOW
+  PCT_CHANGE_UP
+  PCT_CHANGE_DOWN
+  VOLUME_SPIKE
+  OI_CHANGE
+}
+
+model Alert {
+  id          String         @id @default(cuid())
+  userId      String
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  symbol      String
+  condition   AlertCondition
+  targetValue Float
+  isActive    Boolean        @default(true)
+  triggeredAt DateTime?
+  createdAt   DateTime       @default(now())
+
+  @@index([userId])
+  @@index([symbol])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  entity    String?
+  entityId  String?
+  metadata  Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model ApiCache {
+  id        String   @id @default(cuid())
+  cacheKey  String   @unique
+  payload   Json
+  source    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([cacheKey])
+  @@index([expiresAt])
+}
+
+enum CandleInterval {
+  ONE_MIN
+  FIVE_MIN
+  FIFTEEN_MIN
+  TWENTY_FIVE_MIN
+  SIXTY_MIN
+  DAILY
+}
+
+/// Persisted OHLCV history, synced from DhanHQ. Distinct from ApiCache
+/// (which is short-lived) — this is permanent storage for charting/backtesting.
+model HistoricalCandle {
+  id              String         @id @default(cuid())
+  securityId      String
+  exchangeSegment String
+  interval        CandleInterval
+  timestamp       DateTime
+  open            Float
+  high            Float
+  low             Float
+  close           Float
+  volume          BigInt
+  openInterest    Float?
+  createdAt       DateTime       @default(now())
+
+  @@unique([securityId, exchangeSegment, interval, timestamp])
+  @@index([securityId, interval, timestamp])
+}
+
+/// Instrument master — maps human-readable symbols to Dhan's securityId,
+/// required for every market data call. Synced periodically from Dhan's
+/// instrument list dump.
+model Instrument {
+  id              String   @id @default(cuid())
+  securityId      String   @unique
+  symbol          String
+  exchangeSegment String
+  instrumentType  String
+  lotSize         Int?
+  tickSize        Float?
+  isActive        Boolean  @default(true)
+  updatedAt       DateTime @updatedAt
+
+  @@index([symbol])
+  @@index([exchangeSegment, instrumentType])
+}
+
+/// Tracks health/availability of each upstream API over time, surfaced on
+/// the admin API monitoring dashboard (Phase 10).
+model ApiHealthLog {
+  id           String   @id @default(cuid())
+  source       String // "DHAN" | "FINEDGE"
+  endpoint     String
+  success      Boolean
+  statusCode   Int?
+  latencyMs    Int?
+  errorMessage String?
+  createdAt    DateTime @default(now())
+
+  @@index([source, createdAt])
+}
+
+enum CorporateActionType {
+  BONUS
+  SPLIT
+  DIVIDEND
+  RIGHTS
+  BUYBACK
+  MERGER
+  DEMERGER
+  AGM
+  BOARD_MEETING
+  RESULTS
+}
+
+/// Source-agnostic corporate action record. `source` and `sourceRef` track
+/// provenance so the same action reported by two providers can be
+/// reconciled instead of duplicated.
+model CorporateAction {
+  id            String              @id @default(cuid())
+  securityId    String
+  symbol        String
+  actionType    CorporateActionType
+  announcedDate DateTime
+  exDate        DateTime?
+  recordDate    DateTime?
+  /// Free-form details specific to the action type (ratio for bonus/split,
+  /// amount per share for dividend, etc.) — kept as JSON since the shape
+  /// genuinely differs per actionType rather than forcing one wide table.
+  details       Json
+  source        String              @default("MANUAL") // "DHAN" | "FINEDGE" | "MANUAL"
+  sourceRef     String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@unique([securityId, actionType, announcedDate, source])
+  @@index([symbol, actionType])
+  @@index([exDate])
+}
+
+/// Daily/intraday snapshot of breadth indicators, used to chart breadth
+/// over time rather than only showing the current value.
+model MarketBreadthSnapshot {
+  id              String   @id @default(cuid())
+  exchangeSegment String   @default("NSE_EQ")
+  timestamp       DateTime
+  advances        Int
+  declines        Int
+  unchanged       Int
+  newHighs        Int
+  newLows         Int
+  totalVolume     BigInt
+  createdAt       DateTime @default(now())
+
+  @@unique([exchangeSegment, timestamp])
+  @@index([exchangeSegment, timestamp])
+}
+
+enum TopListCategory {
+  TOP_GAINERS
+  TOP_LOSERS
+  MOST_ACTIVE
+  VOLUME_SHOCKERS
+  BREAKOUT
+  BREAKDOWN
+  WEEK_52_HIGH
+  WEEK_52_LOW
+  GAP_UP
+  GAP_DOWN
+  UPPER_CIRCUIT
+  LOWER_CIRCUIT
+}
+
+/// Latest computed top-list results, refreshed continuously during market
+/// hours by the scheduler. One row per (category, securityId) — overwritten
+/// each refresh rather than accumulated, since only the current list matters.
+model TopListEntry {
+  id          String          @id @default(cuid())
+  category    TopListCategory
+  securityId  String
+  symbol      String
+  rank        Int
+  value       Float // % change, volume multiple, etc. — meaning depends on category
+  lastPrice   Float
+  computedAt  DateTime        @default(now())
+
+  @@unique([category, securityId])
+  @@index([category, rank])
+}
+
+/// Audit trail for instrument master sync runs — surfaced in the admin
+/// panel's Instrument Sync page.
+model InstrumentSyncLog {
+  id          String   @id @default(cuid())
+  totalRows   Int
+  upserted    Int
+  skipped     Int
+  durationMs  Int
+  triggeredBy String // "CRON" | "ADMIN:<userId>"
+  success     Boolean
+  errorMessage String?
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+/// Maps an equity security to a NIFTY sectoral index (e.g. NIFTYAUTO,
+/// NIFTYIT) as a sector proxy. NSE's own industry classification is
+/// proprietary with no confirmed free API, so this uses sectoral index
+/// membership instead — accurate for index constituents, intentionally
+/// left empty rather than guessed, and populated via admin entry or a
+/// future sync against each sectoral index's published constituent list.
+model SectorMapping {
+  id              String   @id @default(cuid())
+  securityId      String   @unique
+  symbol          String
+  sectoralIndex   String // e.g. "NIFTYAUTO", "NIFTYIT", "NIFTYBANK"
+  sectoralIndexSecurityId String? // Dhan securityId of the index itself, for fetching index-level OHLC
+  updatedAt       DateTime @updatedAt
+
+  @@index([sectoralIndex])
+}
+
+/// Daily snapshot of sectoral index performance, used to compute sector
+/// strength and rotation (which sectors are gaining/losing momentum
+/// relative to each other and to the broader index).
+model SectorPerformanceSnapshot {
+  id              String   @id @default(cuid())
+  sectoralIndex   String
+  timestamp       DateTime
+  lastPrice       Float
+  changePercent   Float
+  createdAt       DateTime @default(now())
+
+  @@unique([sectoralIndex, timestamp])
+  @@index([sectoralIndex, timestamp])
+}
+
+enum FundamentalPeriodType {
+  QUARTERLY
+  ANNUAL
+  TTM // trailing twelve months
+}
+
+/// Bull50's own normalized fundamentals storage — deliberately
+/// source-agnostic (populated from FinEdge once endpoints are confirmed,
+/// or another provider later) so the rest of the platform queries one
+/// stable shape regardless of upstream changes.
+model CompanyFundamentals {
+  id              String                @id @default(cuid())
+  securityId      String
+  symbol          String
+  periodType      FundamentalPeriodType
+  periodEndDate   DateTime
+  // Valuation
+  marketCap       Float?
+  enterpriseValue Float?
+  peRatio         Float?
+  pbRatio         Float?
+  bookValue       Float?
+  eps             Float?
+  // Profitability
+  roe             Float?
+  roce            Float?
+  // Leverage
+  debtToEquity    Float?
+  // Raw line items kept as JSON — P&L/balance sheet/cash flow have too many
+  // provider-specific line items to model as individual columns without
+  // constant migrations; the curated fields above are what the rest of the
+  // app queries directly, this JSON is for full statement display.
+  profitLoss      Json?
+  balanceSheet    Json?
+  cashFlow        Json?
+  source          String                @default("UNSET") // "FINEDGE" | "MANUAL"
+  fetchedAt       DateTime              @default(now())
+
+  @@unique([securityId, periodType, periodEndDate])
+  @@index([symbol, periodType])
+}
+
+/// Shareholding pattern snapshot — promoter/institutional/MF/public splits
+/// over time, per the Phase 3 fundamentals requirements.
+model ShareholdingSnapshot {
+  id                   String   @id @default(cuid())
+  securityId           String
+  symbol               String
+  periodEndDate        DateTime
+  promoterPercent      Float?
+  fiiPercent           Float?
+  diiPercent           Float?
+  mutualFundPercent    Float?
+  publicPercent        Float?
+  source               String   @default("UNSET")
+  fetchedAt            DateTime @default(now())
+
+  @@unique([securityId, periodEndDate])
+  @@index([symbol])
+}
