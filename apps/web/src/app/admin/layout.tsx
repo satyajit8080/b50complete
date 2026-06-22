@@ -6,22 +6,16 @@ import Link from "next/link";
 import { useAuthStore } from "@/store/auth";
 
 const NAV_ITEMS = [
-  { href: "/admin/overview", label: "Overview" },
-  { href: "/admin/apis", label: "External APIs" },
-  { href: "/admin/queues", label: "Queues" },
-  { href: "/admin/instruments", label: "Instrument Sync" },
-  { href: "/admin/sectors", label: "Sector Mapping" },
+  { href: "/admin/overview",     label: "Overview" },
+  { href: "/admin/credentials",  label: "API Credentials" },   // NEW
+  { href: "/admin/market-data",  label: "Market Data" },       // NEW
+  { href: "/admin/apis",         label: "Circuit Breakers" },
+  { href: "/admin/queues",       label: "Queues" },
+  { href: "/admin/instruments",  label: "Instrument Sync" },
+  { href: "/admin/sectors",      label: "Sector Mapping" },
   { href: "/admin/fundamentals", label: "Fundamentals" },
 ];
 
-/**
- * Client-side gate: redirects anyone who isn't ADMIN/SUPERADMIN to
- * /login. This is a UX/defense-in-depth measure, NOT the actual security
- * boundary — every /api/monitoring/* call is independently protected by
- * requireAuth + requireRole on the API side (see routes/monitoring.ts),
- * so even if this client check were bypassed, the backend still refuses
- * unauthorized requests with 401/403.
- */
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { user, isLoading, fetchMe } = useAuthStore();
   const router = useRouter();
@@ -46,8 +40,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   if (!user || (user.role !== "ADMIN" && user.role !== "SUPERADMIN")) {
-    // Redirect is in-flight (see effect above) — render nothing rather
-    // than flash admin content before navigation completes.
     return null;
   }
 
