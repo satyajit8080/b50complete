@@ -1,18 +1,17 @@
 import { Queue, type ConnectionOptions } from "bullmq";
 import { env } from "../config/env.js";
 
-// BullMQ needs a raw ioredis-compatible connection config, not a client
-// instance with our app-level retry wrapping — keep this separate from lib/redis.ts.
 export const queueConnection: ConnectionOptions = {
   host: new URL(env.REDIS_URL).hostname,
   port: Number(new URL(env.REDIS_URL).port || 6379),
-  maxRetriesPerRequest: null, // required by BullMQ workers
+  maxRetriesPerRequest: null,
 };
 
 export const QUEUE_NAMES = {
-  HISTORICAL_SYNC: "historical-sync",
-  INSTRUMENT_SYNC: "instrument-sync",
-  CORPORATE_ACTIONS_SYNC: "corporate-actions-sync",
+  HISTORICAL_SYNC:       "historical-sync",
+  INSTRUMENT_SYNC:       "instrument-sync",
+  CORPORATE_ACTIONS_SYNC:"corporate-actions-sync",
+  OPTION_CHAIN_SYNC:     "option-chain-sync",      // NEW
 } as const;
 
 const defaultJobOptions = {
@@ -33,6 +32,11 @@ export const instrumentSyncQueue = new Queue(QUEUE_NAMES.INSTRUMENT_SYNC, {
 });
 
 export const corporateActionsSyncQueue = new Queue(QUEUE_NAMES.CORPORATE_ACTIONS_SYNC, {
+  connection: queueConnection,
+  defaultJobOptions,
+});
+
+export const optionChainSyncQueue = new Queue(QUEUE_NAMES.OPTION_CHAIN_SYNC, {
   connection: queueConnection,
   defaultJobOptions,
 });
