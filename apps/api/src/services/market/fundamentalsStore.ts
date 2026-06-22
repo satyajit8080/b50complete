@@ -22,39 +22,58 @@ export interface FundamentalsInput {
   source: "FINEDGE" | "MANUAL";
 }
 
-/**
- * Upserts a fundamentals record. Deliberately provider-agnostic — this is
- * the write path FinEdge will call once its endpoints are confirmed, but
- * it's equally usable for manual entry or a future alternate provider
- * without any schema or API consumer changes.
- */
 export async function upsertFundamentals(input: FundamentalsInput) {
+  // Destructure to avoid spreading the union-typed `source` directly into
+  // Prisma's create/update — tsc can't narrow spread types, so we pass
+  // fields explicitly to keep the compiler happy.
+  const {
+    securityId, symbol, periodType, periodEndDate,
+    marketCap, enterpriseValue, peRatio, pbRatio,
+    bookValue, eps, roe, roce, debtToEquity,
+    profitLoss, balanceSheet, cashFlow, source,
+  } = input;
+
+  const data = {
+    securityId, symbol, periodType, periodEndDate,
+    marketCap, enterpriseValue, peRatio, pbRatio,
+    bookValue, eps, roe, roce, debtToEquity,
+    profitLoss, balanceSheet, cashFlow,
+    source,
+    fetchedAt: new Date(),
+  };
+
   const result = await prisma.companyFundamentals.upsert({
     where: {
-      securityId_periodType_periodEndDate: {
-        securityId: input.securityId,
-        periodType: input.periodType,
-        periodEndDate: input.periodEndDate,
-      },
+      securityId_periodType_periodEndDate: { securityId, periodType, periodEndDate },
     },
-    create: { ...input, fetchedAt: new Date() },
-    update: { ...input, fetchedAt: new Date() },
+    create: data,
+    update: data,
   });
 
-  await invalidateCache(`fundamentals:${input.securityId}:`, true);
+  await invalidateCache(`fundamentals:${securityId}:`, true);
   return result;
 }
 
-export async function getLatestFundamentals(securityId: string, periodType: FundamentalPeriodType = "QUARTERLY") {
-  return cached(`fundamentals:${securityId}:${periodType}`, { ttlSeconds: CACHE_TTL.FUNDAMENTALS }, () =>
-    prisma.companyFundamentals.findFirst({
-      where: { securityId, periodType },
-      orderBy: { periodEndDate: "desc" },
-    })
+export async function getLatestFundamentals(
+  securityId: string,
+  periodType: FundamentalPeriodType = "QUARTERLY"
+) {
+  return cached(
+    `fundamentals:${securityId}:${periodType}`,
+    { ttlSeconds: CACHE_TTL.FUNDAMENTALS },
+    () =>
+      prisma.companyFundamentals.findFirst({
+        where: { securityId, periodType },
+        orderBy: { periodEndDate: "desc" },
+      })
   );
 }
 
-export async function getFundamentalsHistory(securityId: string, periodType: FundamentalPeriodType, limit = 8) {
+export async function getFundamentalsHistory(
+  securityId: string,
+  periodType: FundamentalPeriodType,
+  limit = 8
+) {
   return prisma.companyFundamentals.findMany({
     where: { securityId, periodType },
     orderBy: { periodEndDate: "desc" },
@@ -73,10 +92,11 @@ export async function upsertShareholding(input: {
   publicPercent?: number;
   source: "FINEDGE" | "MANUAL";
 }) {
+  const { securityId, periodEndDate, ...rest } = input;
   return prisma.shareholdingSnapshot.upsert({
-    where: { securityId_periodEndDate: { securityId: input.securityId, periodEndDate: input.periodEndDate } },
-    create: { ...input, fetchedAt: new Date() },
-    update: { ...input, fetchedAt: new Date() },
+    where: { securityId_periodEndDate: { securityId, periodEndDate } },
+    create: { securityId, periodEndDate, ...rest, fetchedAt: new Date() },
+    update: { ...rest, fetchedAt: new Date() },
   });
 }
 
